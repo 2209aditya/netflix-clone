@@ -57,13 +57,6 @@ To set up and run this project locally, ensure you have the following installed 
 - **Node.js** and **npm** (for running backend and frontend locally).
 - **Git**: For cloning the repository and version control.
 
-### Clone the Repository
-
-First, clone this repository to your local machine:
-```bash
-git clone https://github.com/your-username/netflix-clone.git
-cd netflix-clone
-
 
 
 
