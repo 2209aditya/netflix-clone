@@ -1,0 +1,199 @@
+Monitoring with Prometheus
+Prometheus is an open-source monitoring tool that collects time-series data from applications. You can set up Prometheus to scrape metrics from your backend and frontend applications. The monitoring steps involve configuring Prometheus to scrape your applications' metrics and visualizing them with Grafana.
+
+Steps to Set Up Prometheus Monitoring for Your Netflix Clone Project
+1. Instrumenting the Backend and Frontend Code
+Prometheus collects metrics by scraping HTTP endpoints exposed by applications. To make your backend and frontend applications Prometheus-compatible, you need to expose metrics from both services.
+
+1.1 Instrumenting the Backend (Node.js)
+In your Node.js backend application, you can use the prom-client package to expose metrics that Prometheus can scrape.
+
+Install prom-client:
+
+In your backend project, install the prom-client library to expose Prometheus metrics.
+
+bash
+Copy
+cd backend
+npm install prom-client
+Create an endpoint to expose metrics:
+
+In your server.js or equivalent file (where your Express app is initialized), add the following code to expose Prometheus metrics:
+
+js
+Copy
+const express = require('express');
+const promClient = require('prom-client');
+const app = express();
+const port = process.env.PORT || 8080;
+
+// Create a Registry to hold the metrics
+const register = new promClient.Registry();
+
+// Create some example metrics
+const httpRequestDurationMicroseconds = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  buckets: [0.1, 0.3, 0.5, 1.0, 2.5, 5.0],
+});
+
+// Register the histogram with the Prometheus registry
+register.registerMetric(httpRequestDurationMicroseconds);
+
+// Create a route that will expose the metrics
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
+// Example of tracking HTTP requests
+app.get('/', (req, res) => {
+  const end = httpRequestDurationMicroseconds.startTimer();
+  res.send('Hello World!');
+  end({ status_code: res.statusCode });
+});
+
+// Start the server
+app.listen(port, () => {
+  console.log(`Backend listening at http://localhost:${port}`);
+});
+The /metrics endpoint will expose Prometheus metrics like the HTTP request duration histogram.
+Prometheus will scrape this /metrics endpoint to collect data.
+1.2 Instrumenting the Frontend (React.js)
+For the frontend, you can use the prometheus-client or a similar library to collect metrics for things like page load times, API call durations, etc.
+
+However, React.js applications typically run in the browser, so collecting metrics for frontend behavior often involves integrating JavaScript libraries like web-vitals or react-metrics. You can expose those metrics to your backend, which will expose them via the /metrics endpoint to Prometheus.
+
+To keep things simple for monitoring purposes, it’s common to use backend metrics like response times, application health, and error rates. Frontend monitoring can be done by collecting browser metrics and sending them to the backend for aggregation and visualization.
+
+2. Setting Up Prometheus
+Prometheus will scrape your backend's /metrics endpoint periodically to collect the application metrics.
+
+2.1 Create a Prometheus Configuration File
+Create a prometheus.yml configuration file to tell Prometheus where to scrape metrics from:
+
+yaml
+Copy
+global:
+  scrape_interval: 15s  # Scrape every 15 seconds
+
+scrape_configs:
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['backend:8080']  # Scraping from backend service at port 8080
+
+  - job_name: 'frontend'
+    static_configs:
+      - targets: ['frontend:3000']  # Scraping from frontend service if you expose frontend metrics (optional)
+Here, the backend:8080 refers to the backend container or service, and frontend:3000 refers to the frontend container/service. Adjust the URLs as per your actual service names and ports.
+
+2.2 Running Prometheus with Docker (Optional)
+You can run Prometheus in a Docker container by creating a docker-compose.yml file like this:
+
+yaml
+Copy
+version: '3'
+services:
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"  # Exposes Prometheus dashboard on port 9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+Run the following command to start Prometheus:
+
+bash
+Copy
+docker-compose up
+Prometheus will now scrape your backend and frontend (if you expose frontend metrics) at the defined intervals.
+
+3. Setting Up Grafana
+Grafana is an open-source platform for monitoring and visualizing data. After setting up Prometheus, you can use Grafana to create dashboards and visualize the metrics.
+
+3.1 Running Grafana with Docker
+You can run Grafana in Docker as well. Create a docker-compose.yml file that includes both Prometheus and Grafana:
+
+yaml
+Copy
+version: '3'
+services:
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"  # Exposes Grafana UI on port 3000
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: 'admin'  # Default password for Grafana admin
+    depends_on:
+      - prometheus
+Run the following command to start both Prometheus and Grafana:
+
+bash
+Copy
+docker-compose up
+Grafana will be accessible at http://localhost:3000 with the default username admin and the password admin.
+
+3.2 Configure Grafana to Use Prometheus as a Data Source
+Open Grafana at http://localhost:3000.
+Log in using the default username and password (admin/admin).
+Go to Configuration (gear icon) > Data Sources > Add Data Source.
+Select Prometheus as the data source type.
+Set the URL of Prometheus to http://prometheus:9090 (since both are running in the same Docker network).
+Click Save & Test to verify the connection.
+3.3 Create Grafana Dashboards
+Now you can create custom dashboards in Grafana to visualize the metrics scraped by Prometheus.
+
+Go to Create > Dashboard > Add Query.
+Select Prometheus as the data source.
+Query the metrics you want to display, such as http_request_duration_seconds or other backend metrics.
+Customize the dashboard to display visualizations like graphs, tables, and alerts.
+4. Alerting with Prometheus and Grafana
+You can set up alerts in Prometheus or Grafana to notify you if certain conditions are met, like high response times or error rates.
+
+4.1 Set up Alerting in Prometheus
+In the prometheus.yml file, you can add alerting rules:
+
+yaml
+Copy
+rule_files:
+  - "alert.rules"
+
+# Example of alert rule (for response times)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+In alert.rules:
+
+yaml
+Copy
+groups:
+  - name: example-alerts
+    rules:
+    - alert: HighLatency
+      expr: http_request_duration_seconds_bucket{le="2.5"} > 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Response time is too high!"
+4.2 Set Up Alerts in Grafana
+Grafana also supports alerting. You can set up alerts based on specific thresholds for metrics (e.g., if the response time exceeds a certain threshold).
+
+5. Monitor Your Application
+Once everything is set up, you will be able to monitor your Netflix Clone application in Grafana. You can track metrics like:
+
+HTTP request duration
+Error rates
+Response time
+Resource usage (CPU, memory, etc.)
