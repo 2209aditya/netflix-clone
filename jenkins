@@ -1,0 +1,104 @@
+CI/CD Pipeline
+pipeline {
+    agent any
+
+    environment {
+        // Docker Hub credentials
+        DOCKER_HUB_CREDENTIALS = 'docker-hub-creds'
+        BACKEND_IMAGE = 'your-username/netflix-clone-backend'
+        FRONTEND_IMAGE = 'your-username/netflix-clone-frontend'
+
+        // Kubernetes cluster settings
+        KUBE_CONFIG = credentials('kube-config')  // Assuming you store kubeconfig in Jenkins credentials
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Checkout the code from your GitHub repository
+                checkout scm
+            }
+        }
+
+        stage('Build Backend Docker Image') {
+            steps {
+                script {
+                    // Build the Docker image for the backend
+                    docker.build("${BACKEND_IMAGE}", "./backend")
+                }
+            }
+        }
+
+        stage('Build Frontend Docker Image') {
+            steps {
+                script {
+                    // Build the Docker image for the frontend
+                    docker.build("${FRONTEND_IMAGE}", "./frontend")
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Run any tests for the backend and frontend (Optional step)
+                    echo 'Running backend tests...'
+                    sh 'cd backend && npm test'  // Assuming tests are set up in backend
+
+                    echo 'Running frontend tests...'
+                    sh 'cd frontend && npm test'  // Assuming tests are set up in frontend
+                }
+            }
+        }
+
+        stage('Push Docker Images') {
+            steps {
+                script {
+                    // Push the built Docker images to Docker Hub
+                    withCredentials([usernamePassword(credentialsId: DOCKER_HUB_CREDENTIALS, usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        // Login to Docker Hub
+                        sh "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin"
+                        
+                        // Push Backend Image
+                        sh "docker push ${BACKEND_IMAGE}"
+                        
+                        // Push Frontend Image
+                        sh "docker push ${FRONTEND_IMAGE}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    // Set Kubernetes config using credentials
+                    withCredentials([file(credentialsId: KUBE_CONFIG, variable: 'KUBE_CONFIG_FILE')]) {
+                        sh 'export KUBECONFIG=$KUBE_CONFIG_FILE'
+
+                        // Deploy to Kubernetes using kubectl
+                        sh 'kubectl apply -f k8s/backend-deployment.yaml'
+                        sh 'kubectl apply -f k8s/frontend-deployment.yaml'
+                        sh 'kubectl apply -f k8s/backend-service.yaml'
+                        sh 'kubectl apply -f k8s/frontend-service.yaml'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            // Clean up docker images after build
+            sh 'docker system prune -f'
+        }
+
+        success {
+            echo 'Pipeline successfully completed!'
+        }
+
+        failure {
+            echo 'Pipeline failed, please check the logs for errors.'
+        }
+    }
+}
