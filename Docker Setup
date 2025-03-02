@@ -1,0 +1,40 @@
+Docker Setup
+Building Docker Images
+To containerize both the frontend and backend, follow these steps:
+
+Build Docker image for the Backend:
+
+bash
+Copy
+docker build -t netflix-clone-backend ./backend
+Build Docker image for the Frontend:
+
+bash
+Copy
+docker build -t netflix-clone-frontend ./frontend
+Running Locally with Docker
+To run the application using Docker Compose (running both backend and frontend in containers):
+
+Create a docker-compose.yml file in the root directory:
+
+yaml
+Copy
+version: '3'
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+Run Docker Compose:
+
+bash
+Copy
+docker-compose up
+This will start both the backend and frontend in their respective Docker containers, accessible at the following ports:
+
+Backend: http://localhost:8080
+Frontend: http://localhost:3000
